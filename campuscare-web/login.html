@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es" data-publica>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesión | CampusCare</title>
+  <link rel="icon" type="image/png" href="img/logo.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f5132">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/login.css">
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+</head>
+<body class="login-pagina">
+  <main class="tarjeta login-caja">
+    <div class="login-marca">
+      <img src="img/logo.png" alt="Logotipo de CampusCare">
+      <h1>CampusCare</h1>
+    </div>
+
+    <div class="pestanas" role="tablist">
+      <button type="button" id="pestana-entrar" role="tab" aria-selected="true">Iniciar sesión</button>
+      <button type="button" id="pestana-crear" role="tab" aria-selected="false">Crear cuenta</button>
+    </div>
+
+    <form id="form-login" autocomplete="on">
+      <p><label for="l-correo">Correo</label>
+        <input type="email" id="l-correo" name="correo" required autocomplete="username" placeholder="correo@ejemplo.mx"></p>
+      <p><label for="l-pass">Contraseña</label>
+        <input type="password" id="l-pass" name="password" required autocomplete="current-password"></p>
+      <button class="boton" type="submit">Entrar</button>
+    </form>
+
+    <form id="form-registro" hidden autocomplete="on">
+      <p><label for="r-nombre">Nombre</label>
+        <input type="text" id="r-nombre" name="nombre" required minlength="2" maxlength="80" autocomplete="name"></p>
+      <p><label for="r-correo">Correo</label>
+        <input type="email" id="r-correo" name="correo" required autocomplete="email"></p>
+      <p><label for="r-pass">Contraseña (mínimo 8 caracteres)</label>
+        <input type="password" id="r-pass" name="password" required minlength="8" maxlength="100" autocomplete="new-password"></p>
+      <p><label for="r-pass2">Repite la contraseña</label>
+        <input type="password" id="r-pass2" name="password2" required minlength="8" autocomplete="new-password"></p>
+      <button class="boton" type="submit">Crear mi cuenta</button>
+    </form>
+
+    <output id="msg-login" role="status" aria-live="polite"></output>
+
+    <details id="estado-cache" class="diag-cache">
+      <summary><span id="estado-red" class="estado-red">Comprobando…</span> Estado de la caché</summary>
+      <ul>
+        <li>Conexión: <strong id="d-red">…</strong></li>
+        <li>Service worker: <strong id="d-sw">…</strong></li>
+        <li>Caché: <strong id="d-cache">…</strong></li>
+        <li>¿Esta página está en caché? <strong id="d-login">…</strong></li>
+        <li>¿Acceso sin internet listo en este dispositivo? <strong id="d-offline">…</strong></li>
+      </ul>
+    </details>
+  </main>
+
+  <script src="js/sw-registro.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/login.js"></script>
+</body>
+</html>

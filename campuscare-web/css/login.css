@@ -1,0 +1,23 @@
+/* Página de inicio de sesión */
+.login-caja{max-width:440px;margin:0 auto;padding:1.6rem}
+.login-marca{display:flex;align-items:center;justify-content:center;gap:.7rem;margin:0 0 1rem;color:var(--verde)}
+.login-marca img{width:52px;height:52px}
+.login-marca h1{margin:0;font-size:1.7rem}
+.pestanas{display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin:0 0 1.2rem;background:#e8f5ec;padding:.3rem;border-radius:12px}
+.pestanas button{border:0;background:transparent;padding:.6rem;border-radius:9px;font:inherit;font-weight:700;color:var(--verde);cursor:pointer}
+.pestanas button[aria-selected="true"]{background:var(--verde);color:var(--blanco)}
+.login-caja form p{margin:0 0 .9rem}
+.login-caja label{display:block;font-weight:600;margin-bottom:.2rem}
+.login-caja .boton{width:100%;background:var(--verde);color:var(--blanco)}
+.login-caja .boton:disabled{opacity:.6;cursor:wait}
+#msg-login{min-height:1.5rem;margin:.8rem 0 0;font-weight:600}
+.login-pagina{min-height:100vh;display:flex;align-items:center;padding:1.5rem 1rem;background:linear-gradient(rgba(15,81,50,.88),rgba(15,81,50,.88)),url("../img/aula.jpg") center/cover}
+.login-pagina .tarjeta{width:100%;max-width:440px;margin:0 auto}
+.login-caja form[hidden]{display:none}
+/* Estado de red / caché */
+.diag-cache{margin-top:1rem;font-size:.9rem}
+.diag-cache summary{cursor:pointer;font-weight:600}
+.diag-cache ul{list-style:none;padding:0;line-height:1.8}
+.estado-red{font-size:.8rem;font-weight:700;padding:.15rem .6rem;border-radius:999px;background:#e5e7eb;color:#5b6b63;margin-right:.4rem}
+.estado-red.on{background:#dcfce7;color:#166534}
+.estado-red.off{background:#fee2e2;color:#991b1b}

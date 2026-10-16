@@ -1,0 +1,18 @@
+/* Panel de administración */
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tabla-scroll{overflow-x:auto}
+.tabla-usuarios{min-width:820px;font-size:.95rem}
+.tabla-usuarios th,.tabla-usuarios td{padding:.5rem .6rem;text-align:left;vertical-align:middle}
+.tabla-usuarios select{width:auto;min-width:9rem;padding:.35rem .5rem}
+.tabla-usuarios .acciones-fila{display:flex;flex-wrap:wrap;gap:.35rem}
+.tabla-usuarios .boton{padding:.35rem .7rem;font-size:.85rem;background:var(--verde);color:var(--blanco)}
+.tabla-usuarios .boton.sec{background:var(--lima);color:var(--verde)}
+.tabla-usuarios .boton:disabled{opacity:.45;cursor:not-allowed}
+.estado-activo,.estado-inactivo{display:inline-block;padding:.1rem .6rem;border-radius:999px;font-weight:700;font-size:.8rem}
+.estado-activo{background:#d9f2e3;color:#0f5132}
+.estado-inactivo{background:#fde2e2;color:#9b1c1c}
+.opciones{display:grid;gap:.4rem}
+.checks{display:flex;flex-wrap:wrap;gap:.4rem 1rem}
+.checks label{display:flex;align-items:center;gap:.35rem}
+.etiqueta-campo{font-weight:600}
+#msg-admin{display:block;min-height:1.5rem;margin-top:.8rem;font-weight:600}
