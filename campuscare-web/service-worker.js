@@ -5,7 +5,7 @@
    ========================================================== */
 
 // 1) Configuración
-const VERSION = 'v6';                       // cambia este valor cuando agregues o quites archivos
+const VERSION = 'v7';                       // cambia este valor cuando agregues o quites archivos
 const CACHE = `campuscare-${VERSION}`;
 
 const ARCHIVOS = [                          // archivos que se guardan al instalar
@@ -28,6 +28,7 @@ const ARCHIVOS = [                          // archivos que se guardan al instal
   'js/login.js',
   'js/admin.js',
   'js/api.js',
+  'js/cola.js',
   'js/contacto.js',
   'img/logo.png',
   'img/icon-192.png',

@@ -151,6 +151,23 @@ async function avanzar(db, folio, estadoEsperado, clienteId) {
   return obtener(db, folio, clienteId);
 }
 
+// Edita descripción / severidad / espacio / ubicación (el permiso ya lo comprobó acceso())
+async function editar(db, folio, cambios, clienteId) {
+  const f = await filaPorFolio(db, folio);
+  const mapa = { descripcion: 'descripcion', severidad: 'severidad', espacio: 'espacio', ubicacion: 'ubicacion' };
+  const campos = Object.keys(cambios).filter(k => mapa[k]);
+  if (!campos.length) throw new ErrorHttp(400, 'No hay nada que cambiar');
+  const ahora = ahoraUTC();
+  await db.transaccion(async tx => {
+    await tx.ejecutar(
+      `UPDATE tickets SET ${campos.map(k => mapa[k] + ' = ?').join(', ')}, actualizado_en = ? WHERE id = ?`,
+      [...campos.map(k => cambios[k]), ahora, f.id]);
+    await tx.ejecutar('INSERT INTO ticket_historial (ticket_id, estado, nota, creado_en) VALUES (?,?,?,?)',
+      [f.id, Number(f.estado), `Reporte editado (${campos.join(', ')})`, ahora]);
+  });
+  return obtener(db, folio, clienteId);
+}
+
 async function borrar(db, folio, clienteId, esAdmin = false) {
   const f = await filaPorFolio(db, folio);
   if (!esAdmin && (!clienteId || f.cliente_id !== clienteId)) throw new ErrorHttp(403, 'Solo puedes borrar tus propios reportes');
@@ -190,4 +207,4 @@ async function estadisticas(db) {
   return { total: Number(tot.n), activos: Number(act.n), criticos: Number(cri.n), alertasSensor: Number(al.n), porEstado, porZona, calor };
 }
 
-module.exports = { ESTADOS, acceso, obtener, listar, crear, avanzar, borrar, foto, historial, estadisticas };
+module.exports = { ESTADOS, acceso, obtener, listar, crear, avanzar, editar, borrar, foto, historial, estadisticas };

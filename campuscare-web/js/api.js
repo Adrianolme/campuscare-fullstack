@@ -76,6 +76,7 @@
       ubicacion: b.ubicacion, foto: b.foto || undefined, origen: b.origen, sensor: b.sensor
     })),
     avanzarTicket: async (folio, estado) => aFront(await pedir('PATCH', 'tickets/' + encodeURIComponent(folio) + '/estado', { estado })),
+    editarTicket: async (folio, cambios) => aFront(await pedir('PATCH', 'tickets/' + encodeURIComponent(folio), cambios)),
     borrarTicket: (folio) => pedir('DELETE', 'tickets/' + encodeURIComponent(folio)),
     enviarContacto: (c) => pedir('POST', 'contacto', c)
   };

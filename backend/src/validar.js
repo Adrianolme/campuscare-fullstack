@@ -8,6 +8,24 @@ const MAX_FOTO = 200 * 1024; // bytes aprox. de la imagen
 
 const texto = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
+// Edición de un ticket existente: solo descripción, severidad, espacio y ubicación (todos opcionales, al menos uno)
+function validarEdicion(b) {
+  if (!b || typeof b !== 'object') throw new ErrorHttp(400, 'Cuerpo inválido');
+  const errores = [], c = {};
+  if (b.descripcion !== undefined) {
+    const d = texto(b.descripcion, 500);
+    if (d.length < 5) errores.push('descripcion: mínimo 5 caracteres'); else c.descripcion = d;
+  }
+  if (b.severidad !== undefined) {
+    if (!SEVERIDADES.includes(b.severidad)) errores.push('severidad: Baja, Media, Alta o Crítica'); else c.severidad = b.severidad;
+  }
+  if (b.espacio !== undefined) c.espacio = texto(b.espacio, 80);
+  if (b.ubicacion !== undefined) c.ubicacion = texto(b.ubicacion, 160);
+  if (!errores.length && !Object.keys(c).length) errores.push('No hay nada que cambiar');
+  if (errores.length) throw new ErrorHttp(400, 'Datos inválidos', errores);
+  return c;
+}
+
 function validarTicket(b, cat) {
   const errores = [];
   if (!b || typeof b !== 'object') throw new ErrorHttp(400, 'Cuerpo inválido');
@@ -66,4 +84,4 @@ function validarContacto(b) {
   return { nombre, correo, rol, fecha_visita: fecha || null, calificacion, mensaje };
 }
 
-module.exports = { validarTicket, validarContacto };
+module.exports = { validarTicket, validarEdicion, validarContacto };

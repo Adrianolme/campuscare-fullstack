@@ -203,3 +203,8 @@ ol.lista-ideas{counter-reset:i}
 .usuario-menu span{background:rgba(255,255,255,.15);padding:.2rem .7rem;border-radius:999px}
 .usuario-menu a{background:var(--lima);color:var(--verde);font-weight:700}
 [hidden]{display:none !important}
+/* ---- Tickets sin conexión / edición ---- */
+.chip-pend{background:#fef3c7;color:#92400e;border-color:#fcd34d}
+.form-edicion{display:grid;gap:.4rem;margin:.4rem 0}
+.form-edicion label{font-weight:600;font-size:.9rem}
+.form-edicion textarea{resize:vertical}

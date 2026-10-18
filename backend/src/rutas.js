@@ -3,7 +3,7 @@
 // y devuelve {estado, cuerpo} o {estado, binario, tipo}.
 //   roles: undefined → ruta pública | [] → cualquier usuario con sesión | ['admin', ...] → solo esos roles
 const { ErrorHttp } = require('./errores');
-const { validarTicket, validarContacto } = require('./validar');
+const { validarTicket, validarEdicion, validarContacto } = require('./validar');
 const catalogos = require('./servicios/catalogos');
 const tickets = require('./servicios/tickets');
 const contacto = require('./servicios/contacto');
@@ -55,6 +55,11 @@ const rutas = [
   { metodo: 'GET', ruta: '/api/tickets/:folio/historial', roles: [], manejador: async ({ db, params, usuario }) => {
       await tickets.acceso(db, params.folio, usuario);
       return { estado: 200, cuerpo: await tickets.historial(db, params.folio) };
+  } },
+  // Edita el reporte: su dueño, el técnico asignado o el admin
+  { metodo: 'PATCH', ruta: '/api/tickets/:folio', roles: [], manejador: async ({ db, params, body, clienteId, usuario }) => {
+      await tickets.acceso(db, params.folio, usuario);
+      return { estado: 200, cuerpo: await tickets.editar(db, params.folio, validarEdicion(body), clienteId) };
   } },
   // Solo el técnico asignado o el admin avanzan el estado
   { metodo: 'PATCH', ruta: '/api/tickets/:folio/estado', roles: ['tecnico', 'admin'], manejador: async ({ db, params, body, clienteId, usuario }) => {

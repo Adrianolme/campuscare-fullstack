@@ -206,9 +206,14 @@
   // ---------- Tickets ----------
   // Modo API: los tickets viven en la base de datos del servidor. Modo local: en localStorage.
   const API = window.CampusAPI || { iniciar: () => Promise.resolve({ disponible: false }) };
-  let modoApi = false;
-  let tickets = [];
+  const Off = window.CampusOffline;
+  let modoApi = false;      // true = trabaja contra el servidor (con sesión), aunque no haya internet en este momento
+  let enLinea = false;      // ¿el servidor responde ahora mismo?
+  let nombreBD = '';
+  let base = [];            // última lista confirmada por el servidor
+  let tickets = [];         // lo que se ve: base + cambios pendientes de enviar
   let firmaLista = '';
+  let editando = null, borrador = null;   // edición en línea de un ticket
   const guardarTickets = () => { if (!modoApi) guardar(KEY, tickets); };
     // Rol del usuario (en modo local no hay roles: se permite todo)
   const usuarioSesion = window.CampusAuth ? window.CampusAuth.usuario() : null;
@@ -240,27 +245,88 @@
     $('sin-tickets').textContent = r === 'tecnico' ? 'No tienes reportes asignados por ahora.' : 'Aún no hay reportes. Crea el primero arriba.';
   }
   const listo = API.iniciar().then((est) => {
-    modoApi = !!est.disponible;
-    const badge = $('estado-servidor');
-    if (badge) {
-      badge.textContent = modoApi
-        ? `🟢 Conectado al servidor (base de datos: ${est.baseDeDatos || 'activa'}). Los reportes son compartidos.`
-        : '🟠 Modo local: no hay servidor disponible, tus reportes se guardan solo en este navegador.';
+    enLinea = !!est.disponible;
+    nombreBD = est.baseDeDatos || '';
+    // Con sesión iniciada siempre se usa el modo servidor: sin internet se muestra la última copia guardada
+    modoApi = enLinea || !!usuarioSesion;
+    pintarEstado();
+    aplicarRol();
+    if (modoApi) {
+      const c = Off.leerCache();              // se pinta de inmediato lo último guardado
+      if (c) { base = c.lista || []; stats = c.stats || null; reconstruir(); }
+      return recargar(true);
     }
-        aplicarRol();
-    if (modoApi) return recargar(true);
     tickets = leer(KEY, []);
     render();
   });
+
+  // Texto de estado de la conexión y de los cambios sin enviar
+  function pintarEstado() {
+    const badge = $('estado-servidor');
+    if (!badge) return;
+    const n = modoApi ? Off.pendientes() : 0;
+    const pend = n ? ` ⏳ ${n} cambio${n === 1 ? '' : 's'} por enviar.` : '';
+    if (!modoApi) { badge.textContent = '🟠 Modo local: no hay servidor disponible, tus reportes se guardan solo en este navegador.'; return; }
+    if (enLinea) { badge.textContent = `🟢 Conectado al servidor${nombreBD ? ` (base de datos: ${nombreBD})` : ''}. Los reportes son compartidos.` + pend; return; }
+    const c = Off.leerCache();
+    const cuando = c && c.ts ? ` (guardados el ${new Date(c.ts).toLocaleString('es-MX')})` : '';
+    badge.textContent = `🔴 Sin conexión: se muestran los últimos reportes guardados${cuando}. Puedes crear y editar; se enviará solo al volver la red.` + pend;
+  }
+
+  // Lista visible = lista del servidor + cambios pendientes encima
+  function reconstruir() {
+    tickets = Off.aplicar(base);
+    pintarEstado();
+    render();
+  }
+
+  // Envía UNA operación pendiente al servidor
+  function enviarOp(op) {
+    if (op.tipo === 'crear') return API.crearTicket(op.datos);
+    if (op.tipo === 'estado') return API.avanzarTicket(op.folio, op.estado);
+    if (op.tipo === 'editar') return API.editarTicket(op.folio, op.cambios);
+    if (op.tipo === 'borrar') return API.borrarTicket(op.folio);
+    return Promise.resolve();
+  }
+
+  // Manda la cola en orden. Si no hay red se detiene y reintenta luego; si el servidor rechaza una, se descarta y se avisa.
+  let sincronizando = false;
+  async function sincronizar() {
+    if (sincronizando || !Off.pendientes()) return;
+    sincronizando = true;
+    let enviados = 0;
+    const fallos = [];
+    try {
+      for (const op of Off.cola()) {
+        try { await enviarOp(op); Off.quitar(op.id); enviados++; }
+        catch (e) {
+          if (Off.esRed(e)) { enLinea = false; break; }
+          Off.quitar(op.id);
+          fallos.push(`${op.etiqueta || op.tipo}: ${e.message}`);
+        }
+      }
+    } finally { sincronizando = false; }
+    if (enviados) aviso(`✅ Se enviaron ${enviados} cambio${enviados === 1 ? '' : 's'} hechos sin conexión.`);
+    if (fallos.length) setTimeout(() => aviso('⚠️ No se pudo enviar: ' + fallos.join(' · ')), enviados ? 3700 : 0);
+  }
+
   async function recargar(forzar) {
     if (!modoApi) return;
+    if (Off.pendientes() && navigator.onLine) await sincronizar();   // primero se envía lo pendiente
     try {
       const [lista, est] = await Promise.all([API.listarTickets(), API.estadisticas()]);
-      const firma = JSON.stringify([lista.map((t) => [t.folio, t.estado]), est]);
-      if (forzar || firma !== firmaLista) { firmaLista = firma; tickets = lista; stats = est; render(); }
-    } catch { /* sin conexión momentánea: se conserva lo mostrado */ }
+      enLinea = true;
+      Off.guardarCache(lista, est);
+      const firma = JSON.stringify([lista.map((t) => [t.folio, t.estado, t.sev, t.desc, t.espacio]), est, Off.cola().map((o) => o.id)]);
+      if (forzar || firma !== firmaLista) { firmaLista = firma; base = lista; stats = est; if (!editando) reconstruir(); else { pintarEstado(); } }
+      else pintarEstado();
+    } catch (e) {
+      if (Off.esRed(e)) { enLinea = false; pintarEstado(); }   // sin conexión: se conserva lo mostrado
+    }
   }
   setInterval(() => { if (!document.hidden) recargar(false); }, 20000);
+  window.addEventListener('online', () => recargar(true));
+  window.addEventListener('offline', () => { enLinea = false; pintarEstado(); });
 
   function nuevoFolio() {
     const n = leer(KEY_N, 42) + 1;
@@ -285,17 +351,32 @@
   }
 
   // Crea el reporte: en el servidor (modo API) o en este navegador (modo local). Devuelve una promesa.
-  async function registrar(base) {
+  async function registrar(datosBase) {
     await listo;
-    if (!modoApi) return registrarLocal(base);
-    const t = await API.crearTicket(Object.assign({ espacio: '', ubicacion: '', foto: '', origen: 'Reporte de usuario' }, base));
-    await recargar(true);
-    notificar(`${t.folio} asignado`, `${t.cat} · ${t.tecnicoNombre}`);
+    if (!modoApi) return registrarLocal(datosBase);
+    const datos = Object.assign({ espacio: '', ubicacion: '', foto: '', origen: 'Reporte de usuario' }, datosBase);
+    if (enLinea) {
+      try {
+        const t = await API.crearTicket(datos);
+        await recargar(true);
+        notificar(`${t.folio} asignado`, `${t.cat} · ${t.tecnicoNombre}`);
+        return t;
+      } catch (e) { if (!Off.esRed(e)) throw e; enLinea = false; }   // se cayó la red justo ahora: se guarda para después
+    }
+    // Sin conexión: el reporte queda en la cola y se manda solo al volver la red
+    const folio = Off.folioLocal();
+    const t = Object.assign({}, datos, {
+      folio, estado: 0, fecha: new Date().toISOString(), mio: true, pendiente: true,
+      tecnico: null, tecnicoNombre: 'Se asignará al volver la conexión', motivo: 'reporte guardado sin conexión'
+    });
+    Off.encolar({ tipo: 'crear', folio, etiqueta: 'Crear ' + folio, datos, ticket: t });
+    reconstruir();
+    aviso('📴 Sin conexión: tu reporte se guardó y se enviará solo al volver la red.');
     return t;
   }
 
-  function registrarLocal(base) {
-    const t = Object.assign({ espacio: '', ubicacion: '', foto: '', origen: 'Reporte de usuario', estado: 0, fecha: new Date().toISOString() }, base, { folio: nuevoFolio() });
+  function registrarLocal(datosBase) {
+    const t = Object.assign({ espacio: '', ubicacion: '', foto: '', origen: 'Reporte de usuario', estado: 0, fecha: new Date().toISOString() }, datosBase, { folio: nuevoFolio() });
     asignarTecnico(t);
     tickets.unshift(t);
     guardarTickets();
@@ -340,14 +421,14 @@
     const r = $('resultado');
     r.hidden = false;
     r.replaceChildren(
-      el('h3', { text: '✅ Reporte enviado' }),
+      el('h3', { text: t.pendiente ? '📴 Reporte guardado (pendiente de envío)' : '✅ Reporte enviado' }),
       el('p', { class: 'folio', text: t.folio }),
       el('p', {}, [
         el('span', { class: 'chip', text: `${t.icono} ${t.cat}` }), ' ',
         el('span', { class: `chip sev-${CLASE_SEV[t.sev]}`, text: `Severidad ${t.sev}` })
       ]),
       el('p', { class: 'nota', text: `${nombreZona(t.zona)}${t.espacio ? ' · ' + t.espacio : ''}. Tiempo de atención esperado: ${textoHoras(SLA_HORAS[t.sev])}.` }),
-      el('p', { class: 'nota', text: `🧑‍🔧 Asignado automáticamente a ${t.tecnicoNombre}: ${t.motivo}.` })
+      el('p', { class: 'nota', text: t.pendiente ? '📴 Se enviará solo cuando vuelva la conexión y entonces se asignará al técnico.' : `🧑‍🔧 Asignado automáticamente a ${t.tecnicoNombre}: ${t.motivo}.` })
     );
   }
 
@@ -356,24 +437,34 @@
     lista.replaceChildren();
     $('sin-tickets').hidden = tickets.length > 0;
 
+    const pendientes = modoApi ? Off.foliosPendientes() : new Set();
     tickets.forEach((t) => {
       const fecha = new Date(t.fecha);
       const cierre = t.estado >= ESTADOS.length - 1;
       const acciones = el('div', { class: 'acciones' });
       if (puedeAvanzar()) {
         const btn = el('button', { class: 'boton boton-sec', type: 'button', text: cierre ? 'Ciclo completado' : `Avanzar a "${ESTADOS[t.estado + 1]}"` });
-        btn.disabled = cierre;
+        btn.disabled = cierre || !!t.pendiente;
+        if (t.pendiente) btn.textContent = 'Podrás avanzarlo al sincronizar';
         btn.addEventListener('click', () => avanzar(t.folio));
         acciones.append(btn);
       } else {
         acciones.append(el('span', { class: 'nota', text: cierre ? 'Ciclo completado' : 'El técnico asignado actualiza el estado.' }));
       }
+      if (modoApi) {   // editar: su dueño, el técnico asignado o el admin (el servidor lo comprueba al enviar)
+        const ed = el('button', { class: 'boton boton-sec', type: 'button', text: '✏️ Editar' });
+        ed.addEventListener('click', () => {
+          editando = t.folio;
+          borrador = { desc: t.desc, sev: t.sev, espacio: t.espacio || '' };
+          render();
+        });
+        acciones.append(ed);
+      }
       if (esAdmin()) {   // el administrador puede eliminar cualquier reporte
         const del = el('button', { class: 'boton boton-sec', type: 'button', text: '🗑️ Eliminar' });
         del.addEventListener('click', async () => {
           if (!confirm(`¿Eliminar ${t.folio}?`)) return;
-          try { await API.borrarTicket(t.folio); } catch (err) { aviso(err.message); }
-          await recargar(true);
+          try { await borrarUno(t.folio); } catch (err) { aviso(err.message); }
         });
         acciones.append(del);
       }
@@ -381,7 +472,8 @@
       const cuerpo = el('div', { class: 'ticket-cuerpo' }, [
         el('h3', {}, [t.folio, ' ', el('span', { class: `chip sev-${CLASE_SEV[t.sev]}`, text: t.sev })]),
         el('p', {}, [el('span', { class: 'chip', text: `${t.icono} ${t.cat}` }), ' ', el('span', { class: 'chip', text: nombreZona(t.zona) + (t.espacio ? ' · ' + t.espacio : '') }), ' ', el('span', { class: 'chip', text: t.origen === 'Sensor IoT' ? '📡 Sensor IoT' : '🗣️ Usuario' })]),
-        el('p', { class: 'ticket-desc', text: t.desc }),
+        pendientes.has(t.folio) ? el('p', {}, [el('span', { class: 'chip chip-pend', text: t.pendiente ? '⏳ Pendiente de envío' : '⏳ Cambios sin enviar' })]) : '',
+        editando === t.folio ? formEdicion(t) : el('p', { class: 'ticket-desc', text: t.desc }),
         t.tecnicoNombre ? el('p', { class: 'nota', text: `🧑‍🔧 ${t.tecnicoNombre} — ${t.motivo}` }) : '',
         el('p', { class: 'nota' }, [el('time', { datetime: t.fecha, text: fecha.toLocaleString('es-MX') }), t.ubicacion ? ` · 📍 ${t.ubicacion}` : '']),
         el('label', { class: 'estado-lbl', text: `Estado: ${ESTADOS[t.estado]}` }),
@@ -392,8 +484,8 @@
       const hijos = [];
       if (t.tieneFoto || t.foto) {
         const img = el('img', { alt: `Foto del reporte ${t.folio}`, width: '110', class: 'ticket-foto' });
-        if (t.tieneFoto && API.cargarFoto) API.cargarFoto(t.folio).then((u) => { if (u) img.src = u; });   // modo API: foto protegida
-        else img.src = t.foto;                                                                           // modo local
+        if (t.tieneFoto && API.cargarFoto) { img.hidden = true; API.cargarFoto(t.folio).then((u) => { if (u) { img.src = u; img.hidden = false; } }); }   // modo API: foto protegida (sin internet no se muestra)
+        else img.src = t.foto;                                                                           // modo local / reporte pendiente
         hijos.push(img);
       }
       hijos.push(cuerpo);
@@ -415,15 +507,85 @@
     cambios.forEach((f) => f());
   }
 
+  // Formulario de edición dentro del ticket
+  function formEdicion(t) {
+    const desc = el('textarea', { rows: '3', maxlength: '500', 'aria-label': 'Descripción del reporte' });
+    desc.value = borrador.desc;
+    desc.addEventListener('input', () => { borrador.desc = desc.value; });
+    const sev = el('select', { 'aria-label': 'Severidad' }, Object.keys(CLASE_SEV).reverse().map((v) => el('option', { value: v, text: v })));
+    sev.value = borrador.sev;
+    sev.addEventListener('change', () => { borrador.sev = sev.value; });
+    const esp = el('input', { type: 'text', maxlength: '80', placeholder: 'Espacio (aula, oficina…)', 'aria-label': 'Espacio' });
+    esp.value = borrador.espacio;
+    esp.addEventListener('input', () => { borrador.espacio = esp.value; });
+    const guardarBtn = el('button', { class: 'boton', type: 'button', text: '💾 Guardar cambios' });
+    guardarBtn.addEventListener('click', () => guardarEdicion(t));
+    const cancelar = el('button', { class: 'boton boton-sec', type: 'button', text: 'Cancelar' });
+    cancelar.addEventListener('click', () => { editando = null; borrador = null; render(); });
+    return el('div', { class: 'form-edicion' }, [
+      el('label', { text: 'Descripción' }), desc,
+      el('label', { text: 'Severidad' }), sev,
+      el('label', { text: 'Espacio' }), esp,
+      el('div', { class: 'acciones' }, [guardarBtn, cancelar])
+    ]);
+  }
+
+  async function guardarEdicion(t) {
+    const cambios = {};
+    const d = borrador.desc.trim();
+    if (d.length < 5) { aviso('La descripción necesita al menos 5 caracteres.'); return; }
+    if (d !== t.desc) cambios.descripcion = d;
+    if (borrador.sev !== t.sev) cambios.severidad = borrador.sev;
+    if (borrador.espacio.trim() !== (t.espacio || '')) cambios.espacio = borrador.espacio.trim();
+    editando = null; borrador = null;
+    if (!Object.keys(cambios).length) { render(); return; }
+    try { await editarUno(t, cambios); } catch (err) { aviso('No se pudo guardar: ' + err.message); await recargar(true); }
+  }
+
+  // Edita: en el servidor si hay red; si no, queda en la cola
+  async function editarUno(t, cambios) {
+    if (Off.esLocal(t.folio)) { Off.fusionarCrear(t.folio, cambios); reconstruir(); aviso('📴 Cambios guardados; se enviarán con el reporte.'); return; }
+    if (enLinea) {
+      try { await API.editarTicket(t.folio, cambios); await recargar(true); aviso(`✏️ ${t.folio} actualizado.`); return; }
+      catch (e) { if (!Off.esRed(e)) throw e; enLinea = false; }
+    }
+    Off.encolarEditar(t.folio, cambios);
+    reconstruir();
+    aviso('📴 Sin conexión: tus cambios se enviarán al volver la red.');
+  }
+
+  async function borrarUno(folio) {
+    if (Off.esLocal(folio)) { Off.quitarCrear(folio); reconstruir(); return; }
+    if (enLinea) {
+      try { await API.borrarTicket(folio); await recargar(true); return; }
+      catch (e) { if (!Off.esRed(e)) throw e; enLinea = false; }
+    }
+    Off.encolarBorrar(folio);
+    reconstruir();
+    aviso('📴 Sin conexión: se eliminará al volver la red.');
+  }
+
   async function avanzar(folio) {
     const t = tickets.find((x) => x.folio === folio);
     if (!t || t.estado >= ESTADOS.length - 1) return;
     if (modoApi) {
-      try { await API.avanzarTicket(folio, t.estado + 1); } catch (err) { aviso(err.message); await recargar(true); return; }
-      await recargar(true);
-      const n = tickets.find((x) => x.folio === folio) || t;
-      notificar(`${n.folio}: ${ESTADOS[n.estado]}`, n.estado === 3 ? 'Tu reporte fue resuelto. ¡Califica el servicio!' : 'Tu reporte cambió de estado.');
-      aviso(`${n.folio} → ${ESTADOS[n.estado]}`);
+      if (t.pendiente) return;
+      if (enLinea) {
+        try {
+          await API.avanzarTicket(folio, t.estado + 1);
+          await recargar(true);
+          const n = tickets.find((x) => x.folio === folio) || t;
+          notificar(`${n.folio}: ${ESTADOS[n.estado]}`, n.estado === 3 ? 'Tu reporte fue resuelto. ¡Califica el servicio!' : 'Tu reporte cambió de estado.');
+          aviso(`${n.folio} → ${ESTADOS[n.estado]}`);
+          return;
+        } catch (err) {
+          if (!Off.esRed(err)) { aviso(err.message); await recargar(true); return; }
+          enLinea = false;   // se cayó la red: se guarda para después
+        }
+      }
+      Off.encolar({ tipo: 'estado', folio, estado: t.estado + 1, etiqueta: `Avanzar ${folio} a ${ESTADOS[t.estado + 1]}` });
+      reconstruir();
+      aviso(`📴 ${folio} → ${ESTADOS[t.estado + 1]} (se enviará al volver la red)`);
       return;
     }
     t.estado += 1;
@@ -438,9 +600,8 @@
       const mios = tickets.filter((t) => t.mio);
       if (!mios.length) { aviso('No tienes reportes propios que borrar.'); return; }
       if (!confirm(`¿Borrar tus ${mios.length} reporte(s) de la base de datos? Los de otras personas no se tocan.`)) return;
-      for (const t of mios) { try { await API.borrarTicket(t.folio); } catch (err) { aviso(err.message); } }
+      for (const t of mios) { try { await borrarUno(t.folio); } catch (err) { aviso(err.message); } }
       if ($('resultado')) $('resultado').hidden = true;
-      await recargar(true);
       return;
     }
     if (!tickets.length) return;
